@@ -17,6 +17,10 @@ final class UsuarioController extends AbstractController
         UsuarioDto $usuarioDto
         ):JsonResponse{
             dd($usuarioDto);
+            return $this->json([
+                'messagem' => "Welcome"
+            ]);
+
         }
 }
 
