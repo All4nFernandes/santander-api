@@ -2,9 +2,13 @@
 
 namespace App\Controller;
 
+use App\Dto\UsuarioContaDto;
 use App\Dto\UsuarioDto;
+use App\Entity\Conta;
 use App\Entity\Usuario;
+use App\Repository\ContaRepository;
 use App\Repository\UsuarioRepository;
+use Doctrine\Inflector\Rules\NorwegianBokmal\Uninflected;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -71,8 +75,44 @@ class UsuarioController extends AbstractController
 
         // criar o registro na tb usuario
         $entityManager->persist($usuario);
+        
+        // instanciar o objeto conta
+        $conta = new Conta();
+        $numeroConta = preg_replace('/\D/',"", uniqid());
+        // $numeroConta = rand(1,99999);
+        $conta->setNumero($numeroConta);
+        $conta->setSaldo("0");
+        $conta->setUsuario($usuario);
+
+        $entityManager->persist($conta);
         $entityManager->flush();
 
-        return $this->json($usuario);
+
+        // criar registro na tb conta
+        // retornar os dados de usuário e conta
+        $usuarioContaDto = new UsuarioContaDto();
+        $usuarioContaDto->setId($conta->getUsuario()->getId());
+        $usuarioContaDto->setNome($conta->getUsuario()->getNome());
+        $usuarioContaDto->setCpf($conta->getUsuario()->getCpf());
+        $usuarioContaDto->setEmail($conta->getUsuario()->getEmail());
+        $usuarioContaDto->setTelefone($conta->getUsuario()->getTelefone());
+        $usuarioContaDto->setNumeroConta($conta->getNumero());
+        $usuarioContaDto->setSaldo($conta->getSaldo());
+
+        return $this->json($usuarioContaDto, 201);
+    }
+
+    #[Route(path:"/usuarios/{id}", name:"usuarios_buscar", methods: ["GET"])]
+    public function buscarPorId(
+        int $id,
+        ContaRepository $contaRepository
+    ){
+        $conta = $contaRepository->findByUsuarioId($id);
+        if(!$conta){
+            return $this->json([
+                'message' => 'Usuário não encontrado'
+            ], 400);
+        }
+        
     }
 }
