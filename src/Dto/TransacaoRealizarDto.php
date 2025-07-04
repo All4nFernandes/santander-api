@@ -6,8 +6,8 @@ class TransacaoRealizarDto
 {
 
     private ?string $idUsuarioOrigem = null;
-    private ?string $idUsuarioDestino;
-    private ?string $valor;
+    private ?string $idUsuarioDestino = null;
+    private ?string $valor = null;
 
 
 

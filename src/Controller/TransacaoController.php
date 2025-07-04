@@ -3,13 +3,16 @@
 namespace App\Controller;
 
 use App\Dto\TransacaoRealizarDto;
+use App\Entity\Transacao;
 use App\Repository\ContaRepository;
-use Doctrine\ORM\EntityManager;
+use DateTime;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
-use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\Routing\Attribute\Route;
 
+#[Route("/api")]
 final class TransacaoController extends AbstractController
 {
     #[Route('/transacoes', name: 'Trasacao_realizar', methods: ['POST'])]
@@ -18,9 +21,9 @@ final class TransacaoController extends AbstractController
         TransacaoRealizarDto $entrada,
         ContaRepository $contaRepository,
 
-        EntityManager $entityManager,
+        EntityManagerInterface $entityManager
 
-    ): JsonResponse {
+    ): Response {
 
         // 1. validar se a entrada tem id de origem / id de destino / valor -> se tem e > zero
 
@@ -50,6 +53,9 @@ final class TransacaoController extends AbstractController
                 ['message' => 'O valor deve ser maior que zero']
             );
         }
+        if (count($erros) > 0) {
+            return $this->json($erros, 422);
+        }
 
 
         // 2. validar se as constas existem
@@ -57,14 +63,53 @@ final class TransacaoController extends AbstractController
         if ($entrada->getIdUsuarioOrigem() === $entrada->getIdUsuarioDestino()) {
             array_push(
                 $erros,
-                ['message' => 'As contas devem ser diferentes!']
+                ['message' => 'As contas devem ser diferentes!'],
             );
         }
-        // 3. validar se a origem tem saldo sulficiente
 
-        return $this->json([
-            'message' => 'Welcome to your new controller!',
-            'path' => 'src/Controller/TransacaoController.php',
-        ]);
+        $contaOrigem = $contaRepository->findByUsuarioId($entrada->getIdUsuarioOrigem());
+        if (!$contaOrigem) {
+            return $this->json([
+                'message' => 'Conta de origem não encontrada!'
+            ], 404);
+        }
+
+        $contaDestino = $contaRepository->findByUsuarioId($entrada->getIdUsuarioDestino());
+        if (!$contaDestino) {
+            return $this->json([
+                'message' => 'Conta de destino não encontrada!'
+            ], 404);
+        }
+
+
+        // 3. validar se a conta origem tem saldo sulficiente
+
+        if ((float)$contaOrigem->getSaldo() <  (float)$entrada->getValor()) {
+
+            return $this->json([
+                'message' => 'Saldo Insulficiente'
+            ],);
+        }
+        // realizar a transação e salvar no banco
+
+        $saldo = (float) $contaOrigem->getSaldo();
+        $valorT = (float) $entrada->getValor();
+        $saldoDestino = (float) $contaDestino->getSaldo();
+
+        $contaOrigem->setSaldo($saldo - $valorT);
+        $entityManager->persist($contaOrigem);
+
+        $contaDestino->setSaldo($valorT + $saldoDestino);
+        $entityManager->persist($contaDestino);
+
+        $transacao = new Transacao();
+        $transacao->setDataHora((new DateTime));
+        $transacao->setValor($entrada->getValor());
+        $transacao->setContaOrigem($contaOrigem);
+        $transacao->setContaDestino($contaDestino);
+        $entityManager->persist($transacao);
+
+        $entityManager->flush();
+        return new Response(status: 204);
     }
 }
