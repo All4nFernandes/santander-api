@@ -28,6 +28,17 @@ class UsuarioRepository extends ServiceEntityRepository
                 ->getOneOrNullResult()
             ;
         }
+        public function Login($cpf, $senha): Usuario | null
+        {
+            return $this->createQueryBuilder('u')
+            ->Where('u.cpf = :cpf')
+            ->andWhere('u.senha = :senha')
+            ->setParameter('$cpf', $cpf)
+            ->setParameter('$senha', $senha)
+            ->getQuery()
+            ->getOneOrNullResult();
+        }
+
 
     //    public function findOneBySomeField($value): ?Usuario
     //    {

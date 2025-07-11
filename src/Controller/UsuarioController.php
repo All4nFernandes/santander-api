@@ -65,6 +65,14 @@ class UsuarioController extends AbstractController
             ],409);
         }
 
+        // login
+        $usuario = $usuarioRepository->Login($usuarioDto->getCpf(), $usuarioDto->getSenha());
+        if(!$usuario){
+            return $this->json([ 
+                "message" => "Cpf ou Senha incorretos"
+            ],401);
+        }
+
         // converte o DTO em entidade usuário
         $usuario = new Usuario();
         $usuario->setCpf($usuarioDto->getCpf());
