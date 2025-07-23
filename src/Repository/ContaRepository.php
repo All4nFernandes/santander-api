@@ -19,7 +19,7 @@ class ContaRepository extends ServiceEntityRepository
     /**
      *@
      */
-    public function findByUsuarioId($usuarioId): ?Conta
+    public function findByUsuarioId(int $usuarioId): ?Conta
     {
         return $this->createQueryBuilder('c')
             ->join('c.usuario', 'u')
@@ -34,7 +34,7 @@ class ContaRepository extends ServiceEntityRepository
      * @return Conta[] 
      */
 
-    public function findByFiltro(string $valor)
+    public function findByFiltro(int $valor)
     {
 
         $q = $this->createQueryBuilder('c');

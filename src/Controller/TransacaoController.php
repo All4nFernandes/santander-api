@@ -17,65 +17,52 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
 use Symfony\Component\Routing\Attribute\Route;
 
-#[Route("/api")]
+#[Route('/api')]
 final class TransacaoController extends AbstractController
 {
-    #[Route('/transacoes', name: 'Trasacao_realizar', methods: ['POST'])]
+    #[Route('/transacoes', name: 'transacoes_realizar', methods: ['POST'])]
     public function realizar(
         #[MapRequestPayload(acceptFormat: 'json')]
         TransacaoRealizarDto $entrada,
+
         ContaRepository $contaRepository,
-
         EntityManagerInterface $entityManager
-
     ): Response|JsonResponse {
-
-
-
-
-
-        // 1. validar se a entrada tem id de origem / id de destino / valor -> se tem e > zero
-
         $erros = [];
-
+        // Validar o DTO de entrada
         if (!$entrada->getIdUsuarioOrigem()) {
-            array_push(
-                $erros,
-                ['message' => 'Informe a conta de origem']
-            );
+            array_push($erros, [
+                'message' => 'Conta de origem é obrigatória!',
+            ]);
         }
         if (!$entrada->getIdUsuarioDestino()) {
-            array_push(
-                $erros,
-                ['message' => 'Informe a conta de destino']
-            );
+            array_push($erros, [
+                'message' => 'Conta de destino é obrigatória!',
+            ]);
         }
         if (!$entrada->getValor()) {
-            array_push(
-                $erros,
-                ['message' => 'Informe o valor']
-            );
+            array_push($erros, [
+                'message' => 'Valor é obrigatório!',
+            ]);
         }
         if ((float) $entrada->getValor() <= 0) {
-            array_push(
-                $erros,
-                ['message' => 'O valor deve ser maior que zero']
-            );
+            array_push($erros, [
+                'message' => 'Valor deve ser maior que zero!',
+            ]);
         }
+        if ($entrada->getIdUsuarioOrigem() === $entrada->getIdUsuarioDestino()) {
+            array_push($erros, [
+                'message' => 'As contas devem ser distintas!',
+            ]);
+        }
+
         if (count($erros) > 0) {
             return $this->json($erros, 422);
         }
 
+        // Validações de regra de negócio
 
-        // 2. validar se as constas existem
-
-        if ($entrada->getIdUsuarioOrigem() === $entrada->getIdUsuarioDestino()) {
-            array_push(
-                $erros,
-                ['message' => 'As contas devem ser diferentes!'],
-            );
-        }
-
+        // validar se as contas existem
         $contaOrigem = $contaRepository->findByUsuarioId($entrada->getIdUsuarioOrigem());
         if (!$contaOrigem) {
             return $this->json([
@@ -90,17 +77,14 @@ final class TransacaoController extends AbstractController
             ], 404);
         }
 
-
-        // 3. validar se a conta origem tem saldo sulficiente
-
+        // validar se a origem tem saldo suficiente
         if ((float) $contaOrigem->getSaldo() < (float) $entrada->getValor()) {
-
             return $this->json([
-                'message' => 'Saldo Insulficiente',
-            ], );
+                'message' => 'Saldo insuficiente!',
+            ]);
         }
-        // realizar a transação e salvar no banco
 
+        // realizar a transação e salvar no banco
         $saldo = (float) $contaOrigem->getSaldo();
         $valorT = (float) $entrada->getValor();
         $saldoDestino = (float) $contaDestino->getSaldo();
@@ -112,99 +96,80 @@ final class TransacaoController extends AbstractController
         $entityManager->persist($contaDestino);
 
         $transacao = new Transacao();
-        $transacao->setDataHora((new DateTime));
+        $transacao->setDataHora(new DateTime());
         $transacao->setValor($entrada->getValor());
         $transacao->setContaOrigem($contaOrigem);
         $transacao->setContaDestino($contaDestino);
         $entityManager->persist($transacao);
 
         $entityManager->flush();
-        return new Response(status: 204);
+
+        $transacaoDto = $this->converterTransacaoExtratoDto($transacao, $contaOrigem);
+
+        return $this->json($transacaoDto, status: 201);
     }
 
-
-    /*
-            Entrada:
-                idUsuario - quem deseja ver o seu extrato
-
-            Procedimento:
-                validar se o usuário existe
-
-                buscar as transações
-
-                montar a saida
-
-            Saída:
-
-            [
-                {
-                    "id" : 1,
-                    "valor" : "199.90",
-                    "dataHora" : "2025-07-04 00:11:33",
-                    "tipo" : "", // RECEBEU / ENVIOU
-                    "origem" : {
-                        "",
-                    }
-
-                }
-            ]
-
-        */
-
-    // /api/transacoes/{idUsuario}/extrato
-    #[Route("/transacoes/{idUsuario}/extrato", name: 'transacoes_extrato', methods: ['GET'])]
+    #[Route('/transacoes/{idUsuario}/extrato', name: 'transacoes_extrato', methods: ['GET'])]
     public function gerarExtrato(
         int $idUsuario,
         ContaRepository $contaRepository,
         TransacaoRepository $transacaoRepository
     ): JsonResponse {
-
         $conta = $contaRepository->findByUsuarioId($idUsuario);
         if (!$conta) {
             return $this->json([
-                "message" => "Usuario não encontrado!",
+                'message' => 'Usuário não encontrado!',
             ], 404);
-
         }
 
-        $trasacoes = $transacaoRepository->findByContaOrigemAndContaDestino($conta->getId());
+        $transacoes = $transacaoRepository->findByContaOrigemAndContaDestino($conta->getId());
 
         $saida = [];
-        foreach ($trasacoes as $transacao) {
-
-            $transacaoDto = new TransacaoExtratoDto();
-            $transacaoDto->setId($transacao->getId());
-            $transacaoDto->setValor($transacao->getValor());
-            $transacaoDto->setDatahora($transacao->getDataHora());
-
-            if ($conta->getId() === $transacao->getContaOrigem()->getId()) {
-                $transacaoDto->setTipo('ENVIOU');
-            } elseif ($conta->getId() === $transacao->getContaDestino()->getId()) {
-                $transacaoDto->setTipo('RECEBEU');
-            }
-
-            $origem = $transacao->getContaOrigem();
-            $contaOrigemDto = new ContaDto();
-            $contaOrigemDto->setId($origem->getUsuario()->getId());
-            $contaOrigemDto->setNome($origem->getUsuario()->getNome());
-            $contaOrigemDto->setCpf($origem->getUsuario()->getCpf());
-            $contaOrigemDto->setNumeroConta($origem->getNumero());
-
-            $transacaoDto->setOrigem($contaOrigemDto);
-
-            $destino = $transacao->getContaDestino();
-            $contaDestinoDto = new ContaDto();
-            $contaDestinoDto->setId($destino->getUsuario()->getId());
-            $contaDestinoDto->setNome($destino->getUsuario()->getNome());
-            $contaDestinoDto->setCpf($destino->getUsuario()->getCpf());
-            $contaDestinoDto->setNumeroConta($destino->getNumero());
-
-            $transacaoDto->setDestino($contaDestinoDto);
-
-
+        foreach ($transacoes as $transacao) {
+            $transacaoDto = $this->converterTransacaoExtratoDto($transacao, $conta);
             array_push($saida, $transacaoDto);
         }
+
         return $this->json($saida);
+    }
+
+    private function converterTransacaoExtratoDto(
+        Transacao $transacao,
+        Conta $conta
+    ): TransacaoExtratoDto {
+        $transacaoDto = new TransacaoExtratoDto();
+
+        $transacaoDto->setId($transacao->getId());
+        $transacaoDto->setValor($transacao->getValor());
+        $transacaoDto->setDataHora($transacao->getDataHora());
+
+        if ($conta->getId() === $transacao->getContaOrigem()->getId()) {
+            $transacaoDto->setTipo('ENVIOU');
+        } else if ($conta->getId() === $transacao->getContaDestino()->getId()) {
+            $transacaoDto->setTipo('RECEBEU');
+        }
+
+        // origem
+        $origem = $transacao->getContaOrigem();
+        $contaOrigemDto = new ContaDto();
+        $contaOrigemDto->setId($origem->getUsuario()->getId());
+        $contaOrigemDto->setNome($origem->getUsuario()->getNome());
+        $contaOrigemDto->setCpf($origem->getUsuario()->getCpf());
+        $contaOrigemDto->setNumeroConta($origem->getNumero());
+
+        $transacaoDto->setOrigem($contaOrigemDto);
+
+        // destino
+        $destino = $transacao->getContaDestino();
+        $contaDestinoDto = new ContaDto();
+        $contaDestinoDto->setId($destino->getUsuario()->getId());
+        $contaDestinoDto->setNome($destino->getUsuario()->getNome());
+        $contaDestinoDto->setCpf($destino->getUsuario()->getCpf());
+        $contaDestinoDto->setNumeroConta($destino->getNumero());
+
+        $transacaoDto->setDestino($contaDestinoDto);
+
+        return $transacaoDto;
     }
 
 }

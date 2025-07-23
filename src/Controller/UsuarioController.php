@@ -15,7 +15,9 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpKernel\Attribute\MapQueryString;
 use Symfony\Component\HttpKernel\Attribute\MapRequestPayload;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Core\Validator\Constraints\UserPassword;
 
 #[Route("/api")]
 class UsuarioController extends AbstractController
@@ -25,6 +27,7 @@ class UsuarioController extends AbstractController
         #[MapRequestPayload(acceptFormat: 'json')]
         UsuarioDto $usuarioDto,
         UsuarioRepository $usuarioRepository,
+        UserPasswordHasherInterface $passwordHasher,
 
 
         EntityManagerInterface $entityManager
@@ -80,7 +83,15 @@ class UsuarioController extends AbstractController
         $usuario->setCpf($usuarioDto->getCpf());
         $usuario->setNome($usuarioDto->getNome());
         $usuario->setEmail($usuarioDto->getEmail());
-        $usuario->setSenha($usuarioDto->getSenha());
+        
+        // cria o hash da senha
+
+        $senhaComHash = $passwordHasher->hashPassword(
+            $usuario,
+            $usuarioDto->getSenha()
+        );
+        $usuario->setSenha($senhaComHash);
+
         $usuario->setTelefone($usuarioDto->getTelefone());
 
         // criar o registro na tb usuario
